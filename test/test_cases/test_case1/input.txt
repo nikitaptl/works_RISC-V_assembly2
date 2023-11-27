@@ -1,1 +1,3 @@
-0
+..\test_cases\test_case1\input_file.txt
+..\test_cases\test_case1\output.txt
+Y

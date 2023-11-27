@@ -1,3 +1,4 @@
-------------------------------------------
-Enter a number x to calculate 1/e^x: Calculation result: 0.6900405032729512
-------------------------------------------
+1. Enter the name of the input file: 2. Enter the name of the output file: 3. Do you want to display the result on the console? (Enter Y or N): 
+    String 1: NO[AEKWQ
+    String 2: Jig9u5rwdlfh6
+The result has been saved to the file ..\test_cases\test_case7\output.txt

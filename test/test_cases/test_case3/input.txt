@@ -1,1 +1,1 @@
-10
+..\test_cases\test_case3\input_file.txt

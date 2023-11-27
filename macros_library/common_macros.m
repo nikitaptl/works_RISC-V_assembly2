@@ -1,3 +1,5 @@
+# In this library, macros covered in seminars are described, so comments are not provided for them.
+
 #---*------*------*------*------*------*------*------*------*---
 .eqv read_only 0 
 .eqv write_only 1 
@@ -12,29 +14,29 @@
 #---------------------------------------------------------------
 
 #---*------*------*------*------*------*------*------*------*---
-.macro get_str(%bufer, %size)
-li a7 8
-la a0 %bufer
-li a1 %size
-ecall
+.macro get_str(%buffer, %size)
+	li a7 8
+	la a0 %buffer
+	li a1 %size
+	ecall
 
-push(s0)
-push(s1)
-push(s2)
+	push(s0)
+	push(s1)
+	push(s2)
 
-li s0 '\n'
-la s1 %bufer
-loop:
-	lb s2 (s1)
-	beq s2 s0 replace
-	addi s1 s1 1
-	b loop
+	li s0 '\n'
+	la s1 %buffer
+	loop:
+		lb s2 (s1)
+		beq s2 s0 replace
+		addi s1 s1 1
+		b loop
 	
-replace:
-	sb zero (s1)
-	pop(s2)
-	pop(s1)
-	pop(s0)
+	replace:
+		sb zero (s1)
+		pop(s2)
+		pop(s1)
+		pop(s0)
 	
 .end_macro
 #---------------------------------------------------------------
@@ -56,6 +58,14 @@ replace:
 #---*------*------*------*------*------*------*------*------*---
 .macro print_text(%x)
 	la a0 %x
+	li a7 4
+	ecall
+.end_macro
+#---------------------------------------------------------------
+
+#---*------*------*------*------*------*------*------*------*---
+.macro print_text_reg(%x)
+	mv a0 %x
 	li a7 4
 	ecall
 .end_macro
@@ -104,40 +114,26 @@ replace:
 #---------------------------------------------------------------
 
 #---*------*------*------*------*------*------*------*------*---
-.macro find_lb(%start, %num)
-	li t0 '\n'
-	li t1 0 # Индекс первого вхождения /n
-	li t2 0 # Счётчик
-	mv t3 %start
-	mv t4 %num # Для сравнени
-	li t5 0 # Количество /n в файле
-	
-	   
-	loop:
-		lb a0 (t3)
-		beq a0 t0 sym_lb
-		
-		checking:
-		addi t2 t2 1
-		addi t3 t3 1
-		blt t2 t4 loop
-		j end_loop
-		
-		sym_lb:
-			addi t5 t5 1
-			li t6 1
-			
-			beq t5 t6 first_entry
-			j checking
-			
-			first_entry:
-				mv t1 t2
-				j checking
-			
-	end_loop:
-		mv a0 t1
-		mv a1 t5
-		j end
-	end:
-.end_macro 
+.macro close(%file_descriptor)
+    li   a7 57
+    mv   a0 %file_descriptor
+    ecall
+.end_macro
 #---------------------------------------------------------------
+
+#---*------*------*------*------*------*------*------*------*---
+.macro write(%file_descriptor, %buffer, %size)
+    li a7 64
+    mv a0 %file_descriptor
+    mv a1 %buffer
+    mv a2 %size
+    ecall
+.end_macro
+#---------------------------------------------------------------
+
+#---*------*------*------*------*------*------*------*------*---
+.macro input_char # Macro for inputting a character from the console
+	li a7 12
+	ecall
+.end_macro
+#--------------------------------------------------------------- 
