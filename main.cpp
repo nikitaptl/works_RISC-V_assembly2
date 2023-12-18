@@ -18,6 +18,7 @@
 std::map<char, int> encryption;
 std::string original_text;
 pthread_mutex_t mutex; // Мьютекс для защиты original_string для чтения
+pthread_mutex_t mutex_cout;
 
 struct Package {
     int number_priority; // Номер участка исходного текста
@@ -43,9 +44,11 @@ void *encryptString(void *param) {
         std::string encrypted_part = std::to_string(encryption[el]);
         pack->result += encrypted_part;
     }
+    pthread_mutex_lock(&mutex_cout);
     std::cout << BLUE_TEXT << "[encryption]" << RESET_TEXT << " Шифратор " << pack->number_priority
               << " закодировал фрагмент " << YELLOW_TEXT << str_to_encrypt << RESET_TEXT << " в " << pack->result
               << std::endl;
+    pthread_mutex_unlock(&mutex_cout);
     return nullptr;
 }
 
@@ -125,6 +128,7 @@ int main(int argc, char *argv[]) {
         std::getline(std::cin, original_text);
     }
     pthread_mutex_init(&mutex, nullptr); // Инициируем мьютекст
+    pthread_mutex_init(&mutex_cout, nullptr);
 
     // Метод, создающий словарь с кодами шифрования
     createEncryption();
