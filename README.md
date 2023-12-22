@@ -1,1 +1,13 @@
-Hi! Here I am publishing my works for Architecture of computing systems.
+# Отчёт дз10, Потылицин Никита БПИ228
+## Работа была выполнена на оценку 8
+Время работы программы в зависимости от количества потоков:
+
+| Число элементов в векторе | Число потоков | Время выполнения |
+| -- | -- | -- |
+| 100000000 | 1 | 335 |
+| 100000000 | 4 | 416 |
+
+![image](https://github.com/nikitaptl/works_ACS/assets/145208333/673f4652-d239-484e-9ede-7eeae3da650c)
+![image](https://github.com/nikitaptl/works_ACS/assets/145208333/a4dec252-67e0-4fc4-ac03-b82537bdd9c2)
+
+Так же, как и при использовании библиотеки pthread.h, многопоточность OpenMP не даёт выигрыша во времени на моём компьютере
