@@ -1,1 +1,1 @@
-Hi! Here I am publishing my works for Architecture of computing systems.
+# ДЗ_3, Потылицин Никита Сергеевич
