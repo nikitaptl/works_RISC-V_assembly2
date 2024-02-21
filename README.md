@@ -1,1 +1,2 @@
-Hi! Here I am publishing my works for Architecture of computing systems.
+# ДЗ 4 Потылицин Никита Сергеевич
+## Работа выполнена на оценку 9
