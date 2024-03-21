@@ -1,0 +1,2 @@
+Number of digits = 2
+Number of letters = 2

@@ -1,0 +1,2 @@
+Number of digits = 5
+Number of letters = 3
