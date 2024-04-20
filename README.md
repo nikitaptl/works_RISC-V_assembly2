@@ -1,1 +1,3 @@
-Hi! Here I am publishing my works for Architecture of computing systems.
+# Потылицин Никита Сергеевич, БПИ228
+## Задание выполнено на 8 баллов
+### Сергей Александрович, я немного не успел сдать дз7 и форма закрылась, не смог сдать в итоге :( Моя дз7 лежит по ссылке: https://github.com/nikitaptl/works_ACS_OS/tree/homeworks/hw7_OS
