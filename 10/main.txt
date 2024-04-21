@@ -1,0 +1,17 @@
+#include <stdio.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <time.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <semaphore.h>
+#include <signal.h>
+
+#define BLUE_TEXT "\033[0;34m"
+#define RESET_COLOR "\033[0m"
+
+int main() {
+    return 0;
+}
