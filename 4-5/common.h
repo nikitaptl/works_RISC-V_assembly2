@@ -43,10 +43,20 @@ struct Programmer {
 
     bool is_correct;
     bool is_task_poped;
+    bool is_program_checked = true;
 };
 
-// Defined in Server.cpp
-struct Server;
+struct Server {
+    pid_t pid;
+    std::list<Task> task_list;
+    Programmer *programmers;
+    /* since we look at free programmers in a cyclical way,
+     * it is necessary to store the index of the last programmer read */
+    int last_id = 2;
+
+    Server();
+    int find_free_programmer();
+};
 
 struct SharedMemory {
     Programmer programmers[NUM_PROGRAMMERS];
@@ -60,8 +70,11 @@ extern SharedMemory *shm;
 extern char sem_not_busy_name[];
 extern sem_t *not_busy;
 
-extern char mutex_name[];
-extern sem_t *mutex;
+extern char sem_start_name[];
+extern sem_t *start;
+
+extern char sem_server_start_name[];
+extern sem_t *server_start;
 
 void init();
 
