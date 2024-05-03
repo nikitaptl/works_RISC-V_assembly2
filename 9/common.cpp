@@ -7,34 +7,67 @@ SharedMemory *shm;
 char sem_not_busy_name[] = "/not-busy-semaphore";
 sem_t *not_busy;
 
-char mutex_name[] = "/mutex-semaphore";
-sem_t *mutex;
+char sem_start_name[] = "/start-semaphore";
+sem_t *start;
+
+char sem_server_start_name[] = "/server-start-semaphore";
+sem_t *server_start;
+
+Server::Server() {
+    programmers = shm->programmers;
+}
+
+int Server::find_free_programmer() {
+    short num_iter = 0;
+    for (int id = last_id + 1; num_iter < NUM_PROGRAMMERS; id++, num_iter++) {
+        if (id == NUM_PROGRAMMERS) {
+            id = 0;
+        }
+        if (programmers[id].is_free) {
+            last_id = id;
+            return id;
+        }
+    }
+    error_message("Can not find free programmer!");
+    return -1;
+}
 
 // Opens shared memory and common semaphores
 void init() {
     if ((shm_id = shm_open(shm_name, O_CREAT | O_RDWR, 0666)) == -1) {
         error_message("Can not open or create shared memory");
+        perror("shm_open");
         exit(-1);
     }
 
     printf(CYAN_TEXT "[System] " RESET_TEXT "Opened shared memory %s, id = %d\n", shm_name, shm_id);
     if (ftruncate(shm_id, sizeof(SharedMemory)) == -1) {
         error_message("Can not allocate shared memory");
+        perror("ftruncate");
         exit(-1);
     }
 
     shm = static_cast<SharedMemory *>(mmap(0, sizeof(SharedMemory), PROT_WRITE | PROT_READ, MAP_SHARED, shm_id, 0));
     if (shm == (SharedMemory *) -1) {
         error_message("Can not receive address of shared memory");
+        perror("mmap");
         exit(-1);
     }
+    shm->server = -1;
 
     if ((not_busy = sem_open(sem_not_busy_name, O_CREAT, 0666, 0)) == 0) {
         error_message("Can not create not_busy semaphore");
+        perror("sem_open");
         exit(-1);
     }
-    if ((mutex = sem_open(mutex_name, O_CREAT, 0666, 1)) == 0) {
-        error_message("Can not create mutex semaphore");
+    if ((start = sem_open(sem_start_name, O_CREAT, 0666, 0)) == 0) {
+        error_message("Can not create start semaphore");
+        perror("sem_open");
+        exit(-1);
+    }
+    if ((server_start = sem_open(sem_server_start_name, O_CREAT, 0666, 0)) == 0) {
+        error_message("Can not create server start semaphore");
+        perror("sem_open");
         exit(-1);
     }
 }
@@ -42,22 +75,33 @@ void init() {
 void close_common_semaphores() {
     if (sem_close(not_busy) == -1) {
         error_message("Incorrect close of not_busy semaphore");
-        exit(-1);
+        perror("sem_close");
     }
-    if (sem_close(mutex) == -1) {
-        error_message("Incorrect close of mutex semaphore");
-        exit(-1);
+    if (sem_close(start) == -1) {
+        error_message("Incorrect close of start semaphore");
+        perror("sem_close");
+    }
+    if (sem_close(server_start) == -1) {
+        error_message("Incorrect close of server start semaphore");
+        perror("sem_close");
     }
 }
 
 void unlink_all() {
-    if (sem_unlink(sem_not_busy_name)) {
-        error_message("Incorrect unlink of not busy semaphore");
-    }
-    if (sem_unlink(mutex_name)) {
-        error_message("Incorrect unlink of mutex semaphore");
-    }
     if (shm_unlink(shm_name) == -1) {
         error_message("Incorrect unlink of shared memory");
+        perror("shm_unlink");
+    }
+    if (sem_unlink(sem_not_busy_name) == -1) {
+        error_message("Incorrect unlink of not busy semaphore");
+        perror("sem_unlink");
+    }
+    if (sem_unlink(sem_start_name) == -1) {
+        error_message("Incorrect unlink of start semaphore");
+        perror("sem_unlink");
+    }
+    if (sem_unlink(sem_server_start_name) == -1) {
+        error_message("Incorrect unlink of server start semaphore");
+        perror("sem_unlink");
     }
 }

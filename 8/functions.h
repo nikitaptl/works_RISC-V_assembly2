@@ -12,8 +12,4 @@
 #define system_message(message) printf(CYAN_TEXT "[System]" RESET_TEXT " %s\n", message)
 #define programmer_message(message, id) printf(BLUE_TEXT "[Programmer %d]" RESET_TEXT " %s\n", programmer_id, message)
 
-int min(int a, int b) {
-    return a < b ? a : b;
-}
-
 #endif //IHW2_FUNCTIONS_H

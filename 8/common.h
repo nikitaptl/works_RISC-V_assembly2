@@ -1,11 +1,12 @@
 #ifndef IHW2_COMMON_H
 #define IHW2_COMMON_H
 
-#include <semaphore.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/sem.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <fcntl.h>
-#include <sys/mman.h>
 #include <unistd.h>
 #include <list>
 #include "functions.h"
@@ -15,8 +16,7 @@
 enum TaskType {
     Programming,
     Checking,
-    Fixing,
-    Waiting
+    Fixing
 };
 
 struct Task {
@@ -33,35 +33,45 @@ struct Task {
 
 struct Programmer {
     Task current_task = Task{TaskType::Programming, -1, -1};
-
     pid_t pid;
     int id;
+    int task_sem_id; // ID of the task semaphore
     bool is_free = true;
-
-    char task_sem_name[25];
-    sem_t *task_sem;
-
     bool is_correct;
     bool is_task_poped;
+    bool is_program_checked = true;
 };
 
-// Defined in Server.cpp
-struct Server;
+struct Server {
+    pid_t pid;
+    std::list<Task> task_list;
+    Programmer *programmers;
+    /* since we look at free programmers in a cyclical way,
+     * it is necessary to store the index of the last programmer read */
+    int last_id = 2;
+
+    Server();
+
+    int find_free_programmer();
+};
 
 struct SharedMemory {
     Programmer programmers[NUM_PROGRAMMERS];
-    Server *server;
+    pid_t server;
 };
 
-extern char shm_name[];
+extern key_t shm_key;
 extern int shm_id;
 extern SharedMemory *shm;
 
-extern char sem_not_busy_name[];
-extern sem_t *not_busy;
+extern key_t sem_key_not_busy;
+extern int sem_id_not_busy;
 
-extern char mutex_name[];
-extern sem_t *mutex;
+extern key_t sem_key_start;
+extern int sem_id_start;
+
+extern key_t sem_key_server_start;
+extern int sem_id_server_start;
 
 void init();
 

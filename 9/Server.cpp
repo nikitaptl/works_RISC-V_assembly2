@@ -1,73 +1,66 @@
-#include "common.cpp"
+#include "common.h"
 #include <signal.h>
-#include <string.h>
-#include <iostream>
 
-struct Server {
-    std::list<Task> task_list;
-    Programmer *programmers;
-
-    int last_id = 2;
-
-    Server() {
-        programmers = shm->programmers;
+void sig_handler(int sig) {
+    if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
+        return;
     }
-
-    int find_free_programmer() {
-        short num_iter = 0;
-        int id = 0;
-        for (id = last_id + 1; id != last_id; id++, num_iter++) {
-            if(num_iter >= NUM_PROGRAMMERS) {
-                error_message("Server can not find free programmer");
-                break;
-            }
-            if (id == NUM_PROGRAMMERS) {
-                id = 0;
-            }
-            if (programmers[id].is_free) {
-                last_id = id;
-                return id;
-            }
+    if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
+        for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+            kill(shm->programmers[i].pid, SIGTERM);
         }
-        return -1;
+        system_message("Sending a stop signal to the programmers. Suspending execution.");
+    } else {
+        system_message("Server received a stop signal from the programmer.");
     }
-};
-
-void func(int nsig) {
     close_common_semaphores();
     unlink_all();
-    system_message("Goodbye :(");
-    exit(1);
-}
 
-void f_at() {
-    perror("");
+    system_message("Bye!");
+    exit(10);
 }
 
 int main() {
     init();
+    signal(SIGINT, sig_handler);
+    signal(SIGQUIT, sig_handler);
+    signal(SIGTERM, sig_handler);
+    signal(SIGHUP, sig_handler);
+
+    // Waiting for all programmers to start and create their semaphores
+    int num;
+    sem_getvalue(start, &num);
+    if (num == 0) {
+        system_message("Waiting for all the programmers to start...");
+    }
+    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+        sem_wait(start);
+    }
 
     Server server;
+    shm->server = getpid();
     system_message("Server has been started");
     Programmer *programmers = shm->programmers;
-    shm->server = &server;
 
-    sem_open(sem_not_busy_name, O_RDWR, 0666);
-    int not_busy_now;
-    system_message("I'm starting to manage the interaction of programmers...");
-
-    sem_t* task_sems[3];
-    for(int i = 0; i < NUM_PROGRAMMERS; i++) {
-        if((task_sems[i] = sem_open(programmers[i].task_sem_name, O_RDWR, 0666)) == 0) {
-            error_message("бля, не могу открыть семафор");
+    sem_t *task_sems[NUM_PROGRAMMERS];
+    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+        if ((task_sems[i] = sem_open(programmers[i].task_sem_name, O_RDWR, 0666)) == 0) {
+            error_message("Server can not open one of the programmer semaphores.");
+            perror("sem_open");
+            sig_handler(SIGINT);
+            exit(-1);
         }
     }
 
-//    signal(SIGQUIT, func);
+    system_message("I'm starting to manage the interaction of programmers...");
+    // Allow all programmers to start working
+    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+        sem_post(server_start);
+    }
+
+    int not_busy_now;
     while (1) {
         sem_getvalue(not_busy, &not_busy_now);
-        printf("not_busy = %d\n", not_busy_now);
-        sleep(1);
         if (not_busy_now != 0) {
             int id = server.find_free_programmer();
 
@@ -76,20 +69,22 @@ int main() {
                     case TaskType::Programming:
                         // push_back - обычная проверка имеет обычный приоритет
                         server.task_list.push_back(Task{Checking, -1, id});
-                        system_message("Get a new task: Checking");
+                        programmers[id].is_program_checked = false;
+                        system_message("Assigned a new task: Checking");
                         break;
                     case TaskType::Checking:
                         if (programmers[id].is_correct == false) {
                             // push_front - исправление программы имеет главный приоритет
                             server.task_list.push_front(Task{Fixing, programmers[id].current_task.id_linked, id});
+                            system_message("Assigned a new task: Fixing");
+                        } else {
+                            programmers[programmers[id].current_task.id_linked].is_program_checked = true;
                         }
                         break;
                     case TaskType::Fixing:
                         // push_front - перепроверка имеет наивысший приоритет
                         server.task_list.push_front(Task{Checking, programmers[id].current_task.id_linked, id});
-                        break;
-                    default:
-                        programmers[id].current_task = Task{Waiting, -1, -1};
+                        system_message("Assigned a new task: Checking");
                         break;
                 }
                 programmers[id].is_task_poped = true;
@@ -107,21 +102,19 @@ int main() {
                     break;
                 }
             }
+            if (programmers[id].is_program_checked) {
+                new_task = Task{Programming, -1, -1};
+                system_message("Assigned a new task: Programming");
+                is_new_task = true;
+            }
 
             if (is_new_task) {
-                system_message("Я БЛЯТЬ как-то дошёл до сюда!");
                 programmers[id].current_task = new_task;
                 programmers[id].is_free = false;
                 programmers[id].is_task_poped = false;
                 programmers[id].is_correct = true;
 
-//                int old_value;
-//                int new_value;
-//                sem_getvalue(task_sems[id], &old_value);
                 sem_post(task_sems[id]);
-//                sem_getvalue(task_sems[id], &new_value);
-//                printf("ИЗМЕНИЛ значение %d на %d\n", old_value, new_value);
-
                 sem_wait(not_busy);
             }
         }
