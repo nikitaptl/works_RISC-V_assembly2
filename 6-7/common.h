@@ -15,8 +15,7 @@
 enum TaskType {
     Programming,
     Checking,
-    Fixing,
-    Waiting
+    Fixing
 };
 
 struct Task {
@@ -33,39 +32,38 @@ struct Task {
 
 struct Programmer {
     Task current_task = Task{TaskType::Programming, -1, -1};
-
-    pid_t pid;
     int id;
     bool is_free = true;
-
-    char task_sem_name[25];
-    sem_t *task_sem;
-
     bool is_correct;
     bool is_task_poped;
+    bool is_program_checked = true;
 };
 
-// Defined in Server.cpp
-struct Server;
+struct Server {
+    std::list<Task> task_list;
+    Programmer *programmers;
+    /* since we look at free programmers in a cyclical way,
+     * it is necessary to store the index of the last programmer read */
+    int last_id = 2;
+
+    Server();
+
+    int find_free_programmer();
+};
 
 struct SharedMemory {
     Programmer programmers[NUM_PROGRAMMERS];
-    Server *server;
+    sem_t not_busy;
+    sem_t start;
+    sem_t server_start;
+    sem_t task_sems[NUM_PROGRAMMERS];
 };
 
 extern char shm_name[];
 extern int shm_id;
 extern SharedMemory *shm;
 
-extern char sem_not_busy_name[];
-extern sem_t *not_busy;
-
-extern char mutex_name[];
-extern sem_t *mutex;
-
 void init();
-
-void close_common_semaphores();
 
 void unlink_all();
 
