@@ -1,12 +1,16 @@
 #include "common.h"
-#include <sys/wait.h>
 #include <string.h>
 #include <signal.h>
 #include <time.h>
 
-int programmer_id = -1;
-sem_t *sem;
-char task_sem_name[25];
+void init() {
+    init_semaphores();
+    pthread_mutex_init(&mutex, NULL);
+    pthread_mutex_lock(&mutex);
+    sem_wait(sem_id);
+    sem_getvalue(sem_id, &programmer_id);
+    pthread_mutex_unlock(&mutex);
+}
 
 void sig_handler(int sig) {
     if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
@@ -15,30 +19,8 @@ void sig_handler(int sig) {
     if (programmer_id == -1) {
         exit(10);
     }
-    programmer_message("Received a stop signal", programmer_id);
-
-    if (sem_close(sem) == -1) {
-        error_message("Incorrect close of programmer semaphore");
-        perror("");
-    }
-    if (sem_unlink(task_sem_name) == -1) {
-        error_message("Incorrect unlink of programmer semaphore");
-        perror("");
-    }
-
-    if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
-        // Send signal to the server, if his process is running
-        if (shm->server != -1) {
-            kill(shm->server, SIGTERM);
-        } else {
-            if (programmer_id == 0) {
-                close_common_semaphores();
-                unlink_all();
-            }
-        }
-    }
-
-    programmer_message("Bye!", programmer_id);
+    programmer_message("Received a stop signal. Bye!", programmer_id);
+    pthread_mutex_destroy(&mutex);
     exit(10);
 }
 
@@ -49,48 +31,33 @@ int main() {
     signal(SIGTERM, sig_handler);
     signal(SIGHUP, sig_handler);
 
-    int fork_result;
-    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
-        fork_result = fork();
-        if (fork_result == 0) {
-            programmer_id = i;
-            break;
-        }
-    }
-    if (fork_result > 0) {
-        pause();
-    }
-    sprintf(task_sem_name, "/task-semaphore-%d", programmer_id);
-    if ((sem = sem_open(task_sem_name, O_CREAT, 0666, 1)) == 0) {
-        error_message("Can not create task semaphore!");
-        perror("");
-        exit(-1);
-    }
-    sem_post(start);
-
-    Programmer me;
-    me.pid = getpid();
-    me.id = programmer_id;
-    me.task_sem = sem;
-    strcpy(me.task_sem_name, task_sem_name);
-    me.is_free = false;
-    me.is_task_poped = false;
-    shm->programmers[programmer_id] = me;
-    Programmer *programmers = shm->programmers;
-
     // Waiting for server start...
     int num;
-    sem_getvalue(server_start, &num);
+    sem_getvalue(start, &num);
     if (num == 0) {
         programmer_message("Waiting for server start...", programmer_id);
     }
-    sem_getvalue(server_start, &num);
-    sem_wait(server_start);
+    sem_wait(start);
+    init_pipes();
 
-    srand(time(NULL) + me.pid);
+    pid_t my_pid = getpid();
+    if (write(programmer2server[programmer_id], &my_pid, sizeof(pid_t)) != sizeof(pid_t)) {
+        error_message("Can not write pid to server");
+        perror("write");
+        sig_handler(SIGINT);
+    }
+    sem_post(server_start);
+
+    srand(time(NULL) + getpid());
     while (1) {
-        sem_wait(programmers[programmer_id].task_sem);
-        switch (programmers[programmer_id].current_task.task_type) {
+        sem_wait(sem_tasks[programmer_id]);
+        Task task;
+        if (read(server2programmer[programmer_id], &task, sizeof(Task)) != sizeof(Task)) {
+            error_message("Can not read task from server");
+            perror("read");
+            sig_handler(SIGINT);
+        }
+        switch (task.task_type) {
             case TaskType::Programming:
                 programmer_message("Programming...", programmer_id);
                 sleep(3 + rand() % 5);
@@ -98,16 +65,15 @@ int main() {
                 break;
             case TaskType::Checking:
                 printf(BLUE_TEXT "[Programmer %d] " RESET_TEXT "Checking %d program...\n", programmer_id,
-                       programmers[programmer_id].current_task.id_linked);
+                       task.id_linked);
                 sleep(2 + rand() % 3);
                 if (rand() % 2 == 1) {
-                    programmers[programmer_id].is_correct = false;
+                    sem_post(sem_is_correct[programmer_id]);
                     printf(BLUE_TEXT "[Programmer %d] " RESET_TEXT "Found an error in %d program! I am returning it for corrections.\n",
-                           programmer_id, programmers[programmer_id].current_task.id_linked);
+                           programmer_id, task.id_linked);
                 } else {
-                    programmers[programmer_id].is_correct = true;
                     printf(BLUE_TEXT "[Programmer %d] " RESET_TEXT "Didn't find an error in %d program.\n",
-                           programmer_id, programmers[programmer_id].current_task.id_linked);
+                           programmer_id, task.id_linked);
                 }
                 break;
             case TaskType::Fixing:
@@ -117,7 +83,7 @@ int main() {
                        programmer_id);
                 break;
         }
-        programmers[programmer_id].is_free = true;
+        sem_post(sem_is_free[programmer_id]);
         sem_post(not_busy);
     }
 }
