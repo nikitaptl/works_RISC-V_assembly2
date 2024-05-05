@@ -5,8 +5,8 @@
 #include <time.h>
 
 int programmer_id = -1;
-int task_channel_id;
-char task_channel_name[25];
+sem_t *sem;
+char task_sem_name[25];
 
 void sig_handler(int sig) {
     if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
@@ -17,13 +17,22 @@ void sig_handler(int sig) {
     }
     programmer_message("Received a stop signal", programmer_id);
 
+    if (sem_close(sem) == -1) {
+        error_message("Incorrect close of programmer semaphore");
+        perror("");
+    }
+    if (sem_unlink(task_sem_name) == -1) {
+        error_message("Incorrect unlink of programmer semaphore");
+        perror("");
+    }
+
     if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
-        // Send signal to the server if its process is running
+        // Send signal to the server, if his process is running
         if (shm->server != -1) {
             kill(shm->server, SIGTERM);
         } else {
             if (programmer_id == 0) {
-                close_common_channels();
+                close_common_semaphores();
                 unlink_all();
             }
         }
@@ -51,63 +60,36 @@ int main() {
     if (fork_result > 0) {
         pause();
     }
-    sprintf(task_channel_name, "/task-channel-%d", programmer_id);
-    if ((task_channel_id = msgget(IPC_PRIVATE, IPC_CREAT | 0666)) == -1) {
-        error_message("Can not create task channel!");
+    sprintf(task_sem_name, "/task-semaphore-%d", programmer_id);
+    if ((sem = sem_open(task_sem_name, O_CREAT, 0666, 1)) == 0) {
+        error_message("Can not create task semaphore!");
         perror("");
         exit(-1);
     }
-    struct msqid_ds channel_info;
-    if (msgctl(task_channel_id, IPC_STAT, &channel_info) == -1) {
-        error_message("Can not get task channel info!");
-        perror("");
-        exit(-1);
-    }
-    key_t task_channel_key = channel_info.msg_perm.__key;
-    if (msgsnd(start_channel_id, &task_channel_key, sizeof(key_t), 0) == -1) {
-        error_message("Can not send task channel key!");
-        perror("");
-        exit(-1);
-    }
+    sem_post(start);
 
     Programmer me;
     me.pid = getpid();
     me.id = programmer_id;
-    me.task_channel_id = task_channel_id;
-    strcpy(me.task_channel_name, task_channel_name);
+    me.task_sem = sem;
+    strcpy(me.task_sem_name, task_sem_name);
     me.is_free = false;
     me.is_task_poped = false;
     shm->programmers[programmer_id] = me;
     Programmer *programmers = shm->programmers;
 
-    // Wait for server start
-    key_t server_start_key;
-    if (msgrcv(server_start_channel_id, &server_start_key, sizeof(key_t), 0, 0) == -1) {
-        error_message("Can not receive server start key!");
-        perror("");
-        exit(-1);
+    // Waiting for server start...
+    int num;
+    sem_getvalue(server_start, &num);
+    if (num == 0) {
+        programmer_message("Waiting for server start...", programmer_id);
     }
-    int server_start_channel;
-    if ((server_start_channel = msgget(server_start_key, 0666)) == -1) {
-        error_message("Can not open server start channel!");
-        perror("");
-        exit(-1);
-    }
+    sem_getvalue(server_start, &num);
+    sem_wait(server_start);
 
     srand(time(NULL) + me.pid);
     while (1) {
-        struct msgbuf {
-            long mtype;
-            Task task;
-        } message;
-
-        if (msgrcv(task_channel_id, &message, sizeof(Task), 0, 0) == -1) {
-            error_message("Error receiving task message!");
-            perror("");
-            exit(-1);
-        }
-        programmers[programmer_id].current_task = message.task;
-
+        sem_wait(programmers[programmer_id].task_sem);
         switch (programmers[programmer_id].current_task.task_type) {
             case TaskType::Programming:
                 programmer_message("Programming...", programmer_id);
@@ -135,12 +117,7 @@ int main() {
                        programmer_id);
                 break;
         }
-
-        // Notify server
-        if (msgsnd(not_busy_channel_id, &message, sizeof(Task), 0) == -1) {
-            error_message("Error sending task completion message!");
-            perror("");
-            exit(-1);
-        }
+        programmers[programmer_id].is_free = true;
+        sem_post(not_busy);
     }
 }

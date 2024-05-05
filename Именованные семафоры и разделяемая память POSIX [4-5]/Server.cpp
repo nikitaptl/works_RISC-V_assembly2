@@ -1,12 +1,11 @@
 #include "common.h"
 #include <signal.h>
-#include <sys/msg.h>
 
 void sig_handler(int sig) {
     if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
         return;
     }
-    if (sig == SIGINT || sig == SIGQUIT || sig == SIGTERM) {
+    if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
         for (int i = 0; i < NUM_PROGRAMMERS; i++) {
             kill(shm->programmers[i].pid, SIGTERM);
         }
@@ -14,7 +13,7 @@ void sig_handler(int sig) {
     } else {
         system_message("Server received a stop signal from the programmer.");
     }
-    close_common_channels();
+    close_common_semaphores();
     unlink_all();
 
     system_message("Bye!");
@@ -28,22 +27,38 @@ int main() {
     signal(SIGTERM, sig_handler);
     signal(SIGHUP, sig_handler);
 
-    // Waiting for all programmers to start and create their channels
+    // Waiting for all programmers to start and create their semaphores
     int num;
-    msgrcv(start_channel_id, NULL, 0, 0, MSG_NOERROR);
-    system_message("All the programmers have started.");
+    sem_getvalue(start, &num);
+    if (num == 0) {
+        system_message("Waiting for all the programmers to start...");
+    }
+    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+        sem_wait(start);
+    }
 
     Server server;
-    server.pid = getpid();
+    shm->server = getpid();
     system_message("Server has been started");
-    Programmer *programmers = server.programmers;
+    Programmer *programmers = shm->programmers;
+
+    sem_t *task_sems[NUM_PROGRAMMERS];
+    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
+        if ((task_sems[i] = sem_open(programmers[i].task_sem_name, O_RDWR, 0666)) == 0) {
+            error_message("Server can not open one of the programmer semaphores.");
+            perror("sem_open");
+            sig_handler(SIGINT);
+            exit(-1);
+        }
+    }
 
     system_message("I'm starting to manage the interaction of programmers...");
     // Allow all programmers to start working
     for (int i = 0; i < NUM_PROGRAMMERS; i++) {
-        msgsnd(server_start_channel_id, NULL, 0, IPC_NOWAIT);
+        sem_post(server_start);
     }
 
+    int not_busy_now;
     while (1) {
         sem_getvalue(not_busy, &not_busy_now);
         if (not_busy_now != 0) {

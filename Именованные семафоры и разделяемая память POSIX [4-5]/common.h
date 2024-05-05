@@ -1,13 +1,11 @@
 #ifndef IHW2_COMMON_H
 #define IHW2_COMMON_H
 
+#include <semaphore.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
+#include <sys/mman.h>
 #include <unistd.h>
 #include <list>
 #include "functions.h"
@@ -36,7 +34,8 @@ struct Programmer {
     Task current_task = Task{TaskType::Programming, -1, -1};
     pid_t pid;
     int id;
-    int task_channel[2];
+    char task_sem_name[25];
+    sem_t *task_sem;
     bool is_free = true;
     bool is_correct;
     bool is_task_poped;
@@ -61,16 +60,23 @@ struct SharedMemory {
     pid_t server;
 };
 
-extern key_t task_channel_key;
-extern int task_channel_id;
+extern char shm_name[];
+extern int shm_id;
 extern SharedMemory *shm;
 
-extern int not_busy_channel_id;
-extern int start_channel_id;
-extern int server_start_channel_id;
+extern char sem_not_busy_name[];
+extern sem_t *not_busy;
+
+extern char sem_start_name[];
+extern sem_t *start;
+
+extern char sem_server_start_name[];
+extern sem_t *server_start;
 
 void init();
 
-void close_common_channels();
+void close_common_semaphores();
+
+void unlink_all();
 
 #endif //IHW2_COMMON_H
