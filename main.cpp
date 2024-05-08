@@ -36,31 +36,26 @@ void delete_sem() {
 }
 
 void close_pipe() {
-    if (close(fd[0]) == -1) {
-        printf("Can\'t close pipe\n");
-        exit(-1);
-    }
-    if (close(fd[1]) == -1) {
-        printf("Can\'t close pipe\n");
-        exit(-1);
-    }
+    close(fd[0]);
+    close(fd[1]);
 }
 
 void sig_handler(int sig_num) {
     if (sig_num != SIGINT && sig_num != SIGHUP) {
-        if (is_pipe && pid != 0) {
-            close_pipe();
-        }
-        if (is_sem && pid != 0) {
-            delete_sem();
-        }
-        if (pid == 0) {
-            printf(CYAN_TEXT "[CHILD] " RESET_TEXT "Got a stop signal\n");
-        } else {
-            printf(RED_TEXT "[PARENT] " RESET_TEXT "Got a stop signal\n");
-        }
-        exit(10);
+        return;
     }
+    if (is_pipe && pid != 0) {
+        close_pipe();
+    }
+    if (is_sem && pid != 0) {
+        delete_sem();
+    }
+    if (pid == 0) {
+        printf(CYAN_TEXT "[CHILD] " RESET_TEXT "Got a stop signal\n");
+    } else {
+        printf(RED_TEXT "[PARENT] " RESET_TEXT "Got a stop signal\n");
+    }
+    exit(10);
 }
 
 void child(int *pd, int semid) {
@@ -78,7 +73,7 @@ void child(int *pd, int semid) {
             exit(-1);
         }
         printf(CYAN_TEXT "[CHILD] " RESET_TEXT "%s\n", buffer);
-
+        sleep(1);
         memset(buffer, 0, 40);
         sprintf(buffer, "Got message from child №%d", ch++);
         if(semop(semid, &write_minus, 1) < 0) {
@@ -108,19 +103,18 @@ void parent(int *pd, int semid) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-
+        sleep(1);
         memset(buffer, 0, 40);
         if(semop(semid, &read_minus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-        read(pd[0], buffer, 15);
+        read(pd[0], buffer, 40);
         if(semop(semid, &write_plus, 1) < 0) {
             printf("Can\'t add 1 to semaphore\n");
             exit(-1);
         }
         printf(RED_TEXT "[PARENT] " RESET_TEXT "%s\n", buffer);
-        sleep(1);
     }
 }
 
@@ -132,6 +126,7 @@ int main() {
         printf("Pipe error\n");
         return -1;
     }
+    is_pipe = true;
 
     char pathname[] = "main.cpp";
     key_t key = ftok(pathname, 0);
@@ -141,6 +136,7 @@ int main() {
         printf("Can\'t create semaphore\n");
         return -1;
     }
+    is_sem = true;
     // Read sem
     semctl(sem_id, 0, SETVAL, 0);
     // Write sem
@@ -155,5 +151,6 @@ int main() {
     } else {
         parent(fd, sem_id);
     }
+    sig_handler(SIGINT);
     return 0;
 }
