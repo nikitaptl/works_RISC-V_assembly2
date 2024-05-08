@@ -1,1 +1,2 @@
-Hi! Here I am publishing my works for Architecture of computing systems.
+<h1 align = 'center'>Потылицин Никита Сергеевич, БПИ228</h1>
+<h1 align = 'center'>Задание было выполнено на оценку 10</h1>
