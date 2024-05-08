@@ -1,7 +1,5 @@
-#include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
-#include <sys/wait.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -69,23 +67,24 @@ void child(int *pd, int semid) {
     char buffer[40] = "\0";
     int ch = 1;
     while (ch < 1000000000) {
+        memset(buffer, 0, 40);
         if(semop(semid, &read_minus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-        memset(buffer, 0, 40);
         read(pd[0], buffer, 40);
-        printf(CYAN_TEXT "[CHILD] " RESET_TEXT "%s\n", buffer);
         if(semop(semid, &write_plus, 1) < 0) {
             printf("Can\'t add 1 to semaphore\n");
             exit(-1);
         }
+        printf(CYAN_TEXT "[CHILD] " RESET_TEXT "%s\n", buffer);
+
+        memset(buffer, 0, 40);
+        sprintf(buffer, "Got message from child №%d", ch++);
         if(semop(semid, &write_minus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-        memset(buffer, 0, 40);
-        sprintf(buffer, "Got message from child №%d", ch++);
         write(pd[1], buffer, 40);
         if(semop(semid, &read_plus, 1) < 0) {
             printf("Can\'t add 1 to semaphore\n");
@@ -98,28 +97,30 @@ void parent(int *pd, int semid) {
     char buffer[40] = "\0";
     int ch = 1;
     while (ch < 1000000000) {
+        memset(buffer, 0, 40);
+        sprintf(buffer, "Got message from parent №%d", ch++);
         if(semop(semid, &write_minus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-        memset(buffer, 0, 40);
-        sprintf(buffer, "Got message from parent №%d", ch++);
         write(pd[1], buffer, 40);
         if (semop(semid, &read_plus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
+
+        memset(buffer, 0, 40);
         if(semop(semid, &read_minus, 1) < 0) {
             printf("Can\'t sub 1 from semaphore\n");
             exit(-1);
         }
-        memset(buffer, 0, 40);
         read(pd[0], buffer, 15);
-        printf(RED_TEXT "[PARENT] " RESET_TEXT "%s\n", buffer);
         if(semop(semid, &write_plus, 1) < 0) {
             printf("Can\'t add 1 to semaphore\n");
             exit(-1);
         }
+        printf(RED_TEXT "[PARENT] " RESET_TEXT "%s\n", buffer);
+        sleep(1);
     }
 }
 
@@ -153,17 +154,6 @@ int main() {
         child(fd, sem_id);
     } else {
         parent(fd, sem_id);
-        wait(0);
-        close(fd[0]);
-        close(fd[1]);
-        if (semctl(sem_id, 0, IPC_RMID, 0) < 0) {
-            printf("Can\'t delete semaphore\n");
-            return -1;
-        }
     }
-    // if (semctl(sem_id, 0, IPC_RMID, 0) < 0) {
-    //   printf("Can\'t delete semaphore\n");
-    //   return -1;
-    // }
     return 0;
 }
