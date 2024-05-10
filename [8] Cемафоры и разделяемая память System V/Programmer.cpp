@@ -1,12 +1,11 @@
 #include "common.h"
-#include <sys/wait.h>
 #include <string.h>
 #include <signal.h>
 #include <time.h>
 
-int programmer_id = -1;
-int sem_id;
-char task_sem_name[25];
+char task_pathname[] = "Programmer.cpp";
+int sem = -1;
+char task_sem_name[30];
 
 void sig_handler(int sig) {
     if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
@@ -17,23 +16,19 @@ void sig_handler(int sig) {
     }
     programmer_message("Received a stop signal", programmer_id);
 
-    if (semctl(sem_id, 0, IPC_RMID) == -1) {
-        error_message("Incorrect remove of programmer semaphore");
-        perror("semctl");
+    if(sem != -1) {
+        custom_sem_destroy(sem);
     }
-
     if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
         // Send signal to the server, if his process is running
         if (shm->server != -1) {
             kill(shm->server, SIGTERM);
         } else {
             if (programmer_id == 0) {
-                close_common_semaphores();
                 unlink_all();
             }
         }
     }
-
     programmer_message("Bye!", programmer_id);
     exit(10);
 }
@@ -57,40 +52,29 @@ int main() {
         pause();
     }
     sprintf(task_sem_name, "/task-semaphore-%d", programmer_id);
-    if ((sem_id = semget(IPC_PRIVATE, 1, IPC_CREAT | 0666)) < 0) {
-        error_message("Can not create task semaphore!");
-        perror("");
-        exit(-1);
-    }
-    semctl(sem_id, 0, SETVAL, 1);
-    semop(sem_id_start, NULL, 0);
+    sem = custom_sem_open(task_pathname, programmer_id);
+    semctl(sem, 0, SETVAL, 1);
 
     Programmer me;
     me.pid = getpid();
     me.id = programmer_id;
-    me.task_sem_id = sem_id;
-    strcpy(me.task_sem_name, task_sem_name);
+    me.task_sem = sem;
     me.is_free = false;
     me.is_task_poped = false;
     shm->programmers[programmer_id] = me;
     Programmer *programmers = shm->programmers;
+    semop(start, &plus, 1);
 
     // Waiting for server start...
-    int num;
-    semctl(sem_id_server_start, 0, GETVAL, num);
+    int num = semctl(server_start, 0, GETVAL);
     if (num == 0) {
         programmer_message("Waiting for server start...", programmer_id);
     }
-    semop(sem_id_server_start, NULL, 0);
+    semop(server_start, &minus, 1);
 
     srand(time(NULL) + me.pid);
     while (1) {
-        struct sembuf sem_op;
-        sem_op.sem_num = 0;
-        sem_op.sem_op = -1;
-        sem_op.sem_flg = 0;
-        semop(me.task_sem_id, &sem_op, 1);
-
+        semop(sem, &minus, 1);
         switch (programmers[programmer_id].current_task.task_type) {
             case TaskType::Programming:
                 programmer_message("Programming...", programmer_id);
@@ -119,11 +103,6 @@ int main() {
                 break;
         }
         programmers[programmer_id].is_free = true;
-
-        struct sembuf sem_op2;
-        sem_op2.sem_num = 0;
-        sem_op2.sem_op = 1;
-        sem_op2.sem_flg = 0;
-        semop(sem_id_not_busy, &sem_op2, 1);
+        semop(not_busy, &plus, 1);
     }
 }

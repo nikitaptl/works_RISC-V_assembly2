@@ -5,7 +5,7 @@ void sig_handler(int sig) {
     if (sig != SIGINT && sig != SIGQUIT && sig != SIGTERM && sig != SIGHUP) {
         return;
     }
-    if (sig == SIGINT || sig == SIGQUIT || sig == SIGTERM) {
+    if (sig == SIGINT || sig == SIGQUIT || sig == SIGHUP) {
         for (int i = 0; i < NUM_PROGRAMMERS; i++) {
             kill(shm->programmers[i].pid, SIGTERM);
         }
@@ -13,7 +13,6 @@ void sig_handler(int sig) {
     } else {
         system_message("Server received a stop signal from the programmer.");
     }
-    close_common_semaphores();
     unlink_all();
 
     system_message("Bye!");
@@ -28,13 +27,12 @@ int main() {
     signal(SIGHUP, sig_handler);
 
     // Waiting for all programmers to start and create their semaphores
-    int num;
-    semctl(sem_id_start, 0, GETVAL, num);
+    int num = semctl(start, 0, GETVAL);
     if (num == 0) {
         system_message("Waiting for all the programmers to start...");
     }
     for (int i = 0; i < NUM_PROGRAMMERS; i++) {
-        semop(sem_id_start, NULL, 0);
+        semop(start, &minus, 1);
     }
 
     Server server;
@@ -42,25 +40,15 @@ int main() {
     system_message("Server has been started");
     Programmer *programmers = shm->programmers;
 
-    int task_sems[NUM_PROGRAMMERS];
-    for (int i = 0; i < NUM_PROGRAMMERS; i++) {
-        if ((task_sems[i] = semget(IPC_PRIVATE, 1, IPC_CREAT | 0666)) < 0) {
-            error_message("Server can not create one of the programmer semaphores.");
-            perror("semget");
-            sig_handler(SIGINT);
-            exit(-1);
-        }
-    }
-
     system_message("I'm starting to manage the interaction of programmers...");
     // Allow all programmers to start working
     for (int i = 0; i < NUM_PROGRAMMERS; i++) {
-        semop(sem_id_server_start, NULL, 0);
+        semop(server_start, &plus, 1);
     }
 
     int not_busy_now;
     while (1) {
-        semctl(sem_id_not_busy, 0, GETVAL, not_busy_now);
+        not_busy_now = semctl(not_busy, 0, GETVAL);
         if (not_busy_now != 0) {
             int id = server.find_free_programmer();
 
@@ -114,17 +102,8 @@ int main() {
                 programmers[id].is_task_poped = false;
                 programmers[id].is_correct = true;
 
-                struct sembuf sem_op;
-                sem_op.sem_num = 0;
-                sem_op.sem_op = 1;
-                sem_op.sem_flg = 0;
-                semop(task_sems[id], &sem_op, 1);
-
-                struct sembuf sem_op2;
-                sem_op2.sem_num = 0;
-                sem_op2.sem_op = -1;
-                sem_op2.sem_flg = 0;
-                semop(sem_id_not_busy, &sem_op2, 1);
+                semop(programmers[id].task_sem, &plus, 1);
+                semop(not_busy, &minus, 1);
             }
         }
     }

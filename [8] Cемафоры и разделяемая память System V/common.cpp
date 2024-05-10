@@ -1,20 +1,47 @@
 #include "common.h"
 
-key_t shm_key = 1234;
+int programmer_id = -1;
+char pathname[] = "common.cpp";
+key_t shm_key;
 int shm_id;
 SharedMemory *shm;
 
-key_t sem_key_not_busy = 2345;
-int sem_id_not_busy;
+key_t sem_not_busy_key;
+int not_busy;
 
-key_t sem_key_start = 3456;
-int sem_id_start;
+key_t sem_start_key;
+int start;
 
-key_t sem_key_server_start = 4567;
-int sem_id_server_start;
+key_t sem_server_start_key;
+int server_start;
 
 Server::Server() {
     programmers = shm->programmers;
+}
+
+int custom_sem_open(char *pathname, int num = 0) {
+    key_t key;
+    int sem_id;
+    if ((key = ftok(pathname, num)) == -1) {
+        error_message("Can not create key!");
+        perror("ftok");
+        exit(-1);
+    }
+    if ((sem_id = semget(key, 1, 0666 | IPC_CREAT | IPC_EXCL)) < 0) {
+        if ((sem_id = semget(key, 1, 0)) < 0) {
+            error_message("Can not create or connect to semaphore");
+            perror("semget");
+            exit(-1);
+        };
+    }
+    return sem_id;
+}
+
+void custom_sem_destroy(int sem_id) {
+    if (semctl(sem_id, 0, IPC_RMID) < 0) {
+        error_message("Can not destroy semaphore");
+        perror("");
+    }
 }
 
 int Server::find_free_programmer() {
@@ -34,88 +61,44 @@ int Server::find_free_programmer() {
 
 // Opens shared memory and common semaphores
 void init() {
-    if ((shm_id = shmget(shm_key, sizeof(SharedMemory), IPC_CREAT | 0666)) < 0) {
-        error_message("Can not create shared memory");
-        perror("shmget");
+    shm_key = ftok(pathname, 0);
+    if (shm_key == -1) {
+        error_message("Can not create shm-key!");
+        perror("ftok");
         exit(-1);
     }
-
-    if ((shm = (SharedMemory *)shmat(shm_id, NULL, 0)) == (SharedMemory *) -1) {
-        error_message("Can not attach shared memory");
+    if ((shm_id = shmget(shm_key, sizeof(SharedMemory), 0666 | IPC_CREAT | IPC_EXCL)) < 0) {
+        if ((shm_id = shmget(shm_key, sizeof(SharedMemory), 0)) < 0) {
+            error_message("Can not open or create shared memory!");
+            perror("");
+            exit(-1);
+        }
+    }
+    printf(CYAN_TEXT "[System] " RESET_TEXT "Opened shared memory: id = %d\n", shm_id);
+    if ((shm = static_cast<SharedMemory *>(shmat(shm_id, NULL, 0))) == (SharedMemory *) -1) {
+        error_message("Can not receive address of shared memory");
         perror("shmat");
         exit(-1);
     }
     shm->server = -1;
+    not_busy = custom_sem_open(pathname, 1);
+    start = custom_sem_open(pathname, 2);
+    server_start = custom_sem_open(pathname, 3);
 
-    if ((sem_id_not_busy = semget(sem_key_not_busy, 1, IPC_CREAT | 0666)) < 0) {
-        error_message("Can not create not_busy semaphore");
-        perror("semget");
-        exit(-1);
-    }
-
-    if ((sem_id_start = semget(sem_key_start, 1, IPC_CREAT | 0666)) < 0) {
-        error_message("Can not create start semaphore");
-        perror("semget");
-        exit(-1);
-    }
-
-    if ((sem_id_server_start = semget(sem_key_server_start, 1, IPC_CREAT | 0666)) < 0) {
-        error_message("Can not create server start semaphore");
-        perror("semget");
-        exit(-1);
-    }
-
-    union semun {
-        int val;
-        struct semid_ds *buf;
-        ushort *array;
-    } sem_init_val;
-    sem_init_val.val = 0;
-
-    if (semctl(sem_id_not_busy, 0, SETVAL, sem_init_val) == -1) {
-        error_message("Can not initialize not_busy semaphore");
-        perror("semctl");
-        exit(-1);
-    }
-
-    if (semctl(sem_id_start, 0, SETVAL, sem_init_val) == -1) {
-        error_message("Can not initialize start semaphore");
-        perror("semctl");
-        exit(-1);
-    }
-
-    if (semctl(sem_id_server_start, 0, SETVAL, sem_init_val) == -1) {
-        error_message("Can not initialize server start semaphore");
-        perror("semctl");
-        exit(-1);
-    }
-}
-
-void close_common_semaphores() {
-    if (semctl(sem_id_not_busy, 0, IPC_RMID) == -1) {
-        error_message("Incorrect close of not_busy semaphore");
-        perror("semctl");
-    }
-
-    if (semctl(sem_id_start, 0, IPC_RMID) == -1) {
-        error_message("Incorrect close of start semaphore");
-        perror("semctl");
-    }
-
-    if (semctl(sem_id_server_start, 0, IPC_RMID) == -1) {
-        error_message("Incorrect close of server start semaphore");
-        perror("semctl");
+    if (!shm->is_running) {
+        semctl(not_busy, 0, SETVAL, 0);
+        semctl(start, 0, SETVAL, 0);
+        semctl(server_start, 0, SETVAL, 0);
+        shm->is_running = true;
     }
 }
 
 void unlink_all() {
-    if (shmdt(shm) == -1) {
-        error_message("Incorrect detach of shared memory");
-        perror("shmdt");
-    }
-
     if (shmctl(shm_id, IPC_RMID, NULL) == -1) {
-        error_message("Incorrect remove of shared memory");
+        error_message("Incorrect unlink of shared memory");
         perror("shmctl");
     }
+    custom_sem_destroy(not_busy);
+    custom_sem_destroy(start);
+    custom_sem_destroy(server_start);
 }
