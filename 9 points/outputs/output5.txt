@@ -1,2 +1,0 @@
-Number of digits = 1050
-Number of letters = 2310

@@ -1,2 +1,0 @@
-Number of digits = 12
-Number of letters = 28

@@ -1,2 +1,0 @@
-Number of digits = 13
-Number of letters = 37
