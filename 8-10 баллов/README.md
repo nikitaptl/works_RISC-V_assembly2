@@ -1,5 +1,5 @@
 <h1 align = 'center'> Реализация с динамически изменяемым количеством наблюдателей </h1>
-<h2 align = 'center'> Демонстрация </h2>
+<h2 align = 'center'> Демонстрация (грузится не сразу, иногда нужно подождать :( </h2>
 
 ![bandicam-2024-05-28-20-19-20-514](https://github.com/nikitaptl/works_ACS_OS/assets/145208333/c9c2c4bc-4d2e-4c0a-9dd6-96bdce39276c)
 
