@@ -1,0 +1,51 @@
+#include "common.h"
+#include "functions.h"
+
+const char *TaskTypeNames[] = {"Programming", "Checking", "Fixing", "STOP"};
+
+int Server::find_free_programmer() {
+  short num_iter = 0;
+  for (int id = last_id + 1; num_iter < NUM_PROGRAMMERS; id++, num_iter++) {
+    if (id == NUM_PROGRAMMERS) {
+      id = 0;
+    }
+    if (programmers[id].is_free) {
+      last_id = id;
+      return id;
+    }
+  }
+  error_message("Can not find free programmer!");
+  return -1;
+}
+
+Server::Server() {
+  programmers = new Programmer[NUM_PROGRAMMERS];
+}
+
+Server::Server(Programmer *programmers) {
+  this->programmers = programmers;
+}
+
+void OpenOutSocket(struct sockaddr_in &outAddress, int &outSocket, const char *outIp, unsigned short outPort) {
+  if ((outSocket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+    DieWithError("Creating socket failed");
+  }
+  memset(&outAddress, 0, sizeof(outAddress));
+  outAddress.sin_family = AF_INET;
+  outAddress.sin_addr.s_addr = inet_addr(outIp);
+  outAddress.sin_port = htons(outPort);
+}
+
+void OpenServerSocket(int servPort, int &servSock, struct sockaddr_in &servAddr) {
+  if ((servSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
+    DieWithError("socket() failed");
+  }
+  memset(&servAddr, 0, sizeof(servAddr));
+  servAddr.sin_family = AF_INET;
+  servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  servAddr.sin_port = htons(servPort);
+  if (bind(servSock, (struct sockaddr *) &servAddr, sizeof(servAddr)) < 0) {
+    DieWithError("bind() failed");
+  }
+
+}
